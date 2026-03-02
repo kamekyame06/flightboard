@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>国内線 時刻表</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#080f1c;--panel:#0d1826;--card:rgba(255,255,255,0.05);
+  --border:rgba(255,255,255,0.09);--accent:#00d4ff;--green:#00e87a;
+  --orange:#ff6b35;--gold:#f5c842;--text:#dff0ff;--muted:#5580a0;
+  --nav-h:62px;--header-h:52px;--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;}
+
+/* ─── SCREEN CONTAINER ─── */
+.app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+/* ─── HEADER ─── */
+.app-header{
+  height:var(--header-h);flex-shrink:0;
+  background:linear-gradient(180deg,rgba(0,50,100,0.6),rgba(8,15,28,0.95));
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;
+  padding-top:env(safe-area-inset-top,0);
+  backdrop-filter:blur(12px);
+  z-index:100;
+}
+.header-brand{display:flex;align-items:center;gap:8px;}
+.header-plane{font-size:18px;animation:fly 3s ease-in-out infinite;}
+@keyframes fly{0%,100%{transform:translateY(0) rotate(-5deg);}50%{transform:translateY(-3px) rotate(3deg);}}
+.header-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;color:var(--accent);}
+.header-sub{font-size:8px;color:var(--muted);letter-spacing:2px;margin-top:-2px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.live-pill{display:flex;align-items:center;gap:4px;background:rgba(0,232,122,0.1);border:1px solid rgba(0,232,122,0.25);border-radius:10px;padding:3px 8px;}
+.live-dot{width:4px;height:4px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.2;}}
+#liveTime{font-family:'Bebas Neue',sans-serif;font-size:12px;color:var(--green);letter-spacing:1px;}
+
+/* ─── SCREENS ─── */
+.screens{flex:1;position:relative;overflow:hidden;}
+.screen{
+  position:absolute;inset:0;
+  transition:transform .3s cubic-bezier(.4,0,.2,1), opacity .3s;
+  will-change:transform;
+}
+.screen.hidden-left{ transform:translateX(-100%); opacity:0; pointer-events:none; }
+.screen.hidden-right{ transform:translateX(100%); opacity:0; pointer-events:none; }
+.screen.active{ transform:translateX(0); opacity:1; }
+
+/* ─── MAP SCREEN ─── */
+#screen-map{ background:#060f1c; }
+#map{ width:100%;height:100%; }
+.leaflet-tile{filter:brightness(0.65) saturate(0.5) hue-rotate(180deg);}
+.leaflet-container{background:#060f1c !important;}
+
+/* Airport markers */
+.ap-marker{
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:7.5px;font-weight:700;letter-spacing:.2px;
+  border:2px solid rgba(0,212,255,0.4);
+  background:rgba(0,20,50,0.88);color:rgba(0,212,255,0.9);
+  cursor:pointer;transition:all .15s;
+  box-shadow:0 0 8px rgba(0,212,255,0.15);
+}
+.ap-marker.dep{border-color:var(--green);color:var(--green);background:rgba(0,30,15,0.92);box-shadow:0 0 14px rgba(0,232,122,0.5);}
+.ap-marker.arr{border-color:var(--orange);color:var(--orange);background:rgba(30,10,0,0.92);box-shadow:0 0 14px rgba(255,107,53,0.5);}
+
+/* Map overlay: step hint */
+.map-hint{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  background:rgba(8,20,40,0.88);border:1px solid var(--border);
+  border-radius:20px;padding:6px 16px;font-size:11px;color:var(--text);
+  backdrop-filter:blur(8px);z-index:400;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;pointer-events:none;
+}
+.hint-dep{color:var(--green);font-weight:700;}
+.hint-arr{color:var(--orange);font-weight:700;}
+.hint-sep{color:var(--muted);}
+
+/* Map bottom action bar */
+.map-action{
+  position:absolute;bottom:0;left:0;right:0;z-index:400;
+  background:linear-gradient(0deg,rgba(8,15,28,0.98),rgba(8,15,28,0.7));
+  padding:10px 14px calc(10px + var(--safe-bottom));
+  backdrop-filter:blur(8px);
+  border-top:1px solid var(--border);
+}
+.route-summary{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
+  min-height:36px;
+}
+.rs-ap{text-align:center;}
+.rs-code{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;}
+.rs-code.dep{color:var(--green);}
+.rs-code.arr{color:var(--orange);}
+.rs-name{font-size:9px;color:var(--muted);}
+.rs-mid{flex:1;text-align:center;}
+.rs-dur{font-size:10px;color:var(--muted);margin-bottom:3px;}
+.rs-arrow{font-size:16px;color:var(--accent);}
+.rs-empty{font-size:11px;color:var(--muted);width:100%;text-align:center;}
+.action-row{display:flex;gap:8px;align-items:center;}
+.date-field{flex:1;}
+.date-field label{display:block;font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:3px;}
+.date-field input[type=date]{
+  width:100%;background:rgba(255,255,255,.07);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;
+  padding:8px 10px;outline:none;color-scheme:dark;
+}
+.search-btn{
+  background:linear-gradient(135deg,#00d4ff,#007ab0);border:none;color:#fff;
+  border-radius:10px;padding:9px 20px;font-size:13px;font-weight:700;
+  font-family:'Noto Sans JP',sans-serif;cursor:pointer;white-space:nowrap;
+  box-shadow:0 3px 14px rgba(0,212,255,.3);transition:all .15s;
+}
+.search-btn:active{transform:scale(0.97);}
+.search-btn:disabled{opacity:.35;pointer-events:none;}
+.reset-btn{
+  background:none;border:1px solid var(--border);color:var(--muted);
+  border-radius:10px;padding:9px 12px;font-size:14px;cursor:pointer;transition:.15s;
+}
+.reset-btn:active{border-color:rgba(255,100,100,.4);color:#ff8888;}
+
+/* ─── RESULTS SCREEN ─── */
+#screen-results{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;}
+.results-header{
+  flex-shrink:0;padding:10px 14px 8px;
+  background:linear-gradient(180deg,rgba(0,40,80,0.3),transparent);
+  border-bottom:1px solid var(--border);
+}
+.date-nav{display:flex;gap:5px;overflow-x:auto;padding-bottom:6px;}
+.date-nav::-webkit-scrollbar{display:none;}
+.date-chip{
+  flex-shrink:0;background:var(--card);border:1px solid var(--border);
+  color:var(--muted);border-radius:14px;padding:4px 11px;font-size:10px;
+  cursor:pointer;transition:.15s;white-space:nowrap;
+}
+.date-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08);}
+.filter-row{display:flex;gap:5px;overflow-x:auto;margin-top:6px;padding-bottom:2px;}
+.filter-row::-webkit-scrollbar{display:none;}
+.filter-chip{
+  flex-shrink:0;background:var(--card);border:1px solid var(--border);
+  color:var(--muted);border-radius:12px;padding:3px 10px;font-size:10px;
+  cursor:pointer;transition:.15s;
+}
+.filter-chip.active{border-color:var(--gold);color:var(--gold);background:rgba(245,200,66,.07);}
+.results-meta{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 14px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.04);
+}
+.meta-title{font-size:11px;color:var(--muted);}
+.meta-title strong{color:var(--text);font-size:12px;}
+.sort-sel{
+  background:var(--card);border:1px solid var(--border);
+  color:var(--text);border-radius:7px;padding:3px 8px;font-size:10px;
+  cursor:pointer;outline:none;font-family:'Noto Sans JP',sans-serif;
+}
+.sort-sel option{background:#0d2248;}
+.flights-list{flex:1;overflow-y:auto;padding:8px 10px;padding-bottom:calc(8px + var(--safe-bottom));}
+.flights-list::-webkit-scrollbar{display:none;}
+
+/* Loading */
+.loading-screen{
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:12px;
+}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-txt{font-size:11px;color:var(--muted);}
+.no-results{display:none;flex-direction:column;align-items:center;justify-content:center;height:60%;gap:8px;color:var(--muted);font-size:12px;}
+.no-results .icon{font-size:32px;opacity:.3;}
+
+/* ─── FLIGHT CARD ─── */
+.flight-card{
+  background:var(--card);border:1px solid var(--border);border-radius:13px;
+  padding:11px 12px;margin-bottom:8px;display:grid;
+  grid-template-columns:52px 1fr auto;gap:8px;align-items:center;
+  position:relative;overflow:hidden;animation:fadeUp .2s ease both;
+}
+.flight-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);opacity:0;transition:.15s;}
+.flight-card.cheapest{border-color:rgba(245,200,66,.25);}
+.flight-card.cheapest::before{opacity:1;background:var(--gold);}
+.cheap-badge{position:absolute;top:8px;right:9px;background:var(--gold);color:#1a1000;font-size:8px;font-weight:700;padding:1px 5px;border-radius:5px;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+.al-logo{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;letter-spacing:.3px;margin:0 auto 2px;}
+.al-fnum{font-size:8px;color:var(--muted);text-align:center;}
+.time-col{display:flex;align-items:center;gap:5px;}
+.t-block{text-align:center;}
+.t-time{font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;color:#fff;letter-spacing:.5px;}
+.t-code{font-size:8px;color:var(--muted);letter-spacing:.5px;}
+.t-mid{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;}
+.t-dur{font-size:8px;color:var(--muted);}
+.t-line{display:flex;align-items:center;width:100%;gap:2px;}
+.t-bar{flex:1;height:1px;background:linear-gradient(90deg,var(--border),rgba(0,212,255,.3),var(--border));}
+.t-plane{font-size:9px;color:var(--accent);}
+.pr-col{text-align:right;min-width:66px;}
+.pr-num{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent);line-height:1;}
+.pr-unit{font-size:7px;color:var(--muted);}
+.avail{font-size:8px;margin-top:2px;}
+.avail.ok{color:var(--green);}
+.avail.few{color:var(--orange);}
+.avail.none{color:#555;}
+.src-badge{font-size:7px;font-weight:700;padding:1px 4px;border-radius:4px;margin-top:2px;display:inline-block;}
+.src-badge.live{background:rgba(0,232,122,.15);color:var(--green);border:1px solid rgba(0,232,122,.25);}
+.src-badge.demo{background:rgba(245,200,66,.1);color:var(--gold);border:1px solid rgba(245,200,66,.2);}
+
+/* ─── SETTINGS SCREEN ─── */
+#screen-settings{background:var(--bg);overflow-y:auto;padding:14px 14px calc(14px + var(--safe-bottom));}
+.settings-section{margin-bottom:18px;}
+.settings-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;padding-left:2px;}
+.settings-card{background:var(--card);border:1px solid var(--border);border-radius:13px;overflow:hidden;}
+.api-row{padding:12px 14px;}
+.api-desc{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
+.api-input-row{display:flex;gap:7px;}
+.api-input{
+  flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-size:12px;font-family:'Noto Sans JP',sans-serif;
+  padding:8px 11px;outline:none;min-width:0;
+}
+.api-input:focus{border-color:var(--accent);}
+.api-input::placeholder{color:var(--muted);font-size:10px;}
+.api-save-btn{
+  background:rgba(0,212,255,.12);border:1px solid rgba(0,212,255,.3);
+  color:var(--accent);border-radius:9px;padding:8px 14px;font-size:11px;
+  cursor:pointer;font-family:'Noto Sans JP',sans-serif;white-space:nowrap;transition:.15s;
+}
+.api-save-btn:active{background:rgba(0,212,255,.22);}
+.api-status-row{margin-top:8px;display:flex;align-items:center;gap:6px;font-size:10px;}
+.status-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.status-dot.demo{background:var(--gold);}
+.status-dot.live{background:var(--green);}
+.status-dot.err{background:var(--orange);}
+#apiStatusText{color:var(--muted);}
+.api-link{color:var(--accent);font-size:10px;text-decoration:none;margin-left:auto;}
+.info-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 14px;border-top:1px solid var(--border);font-size:12px;
+}
+.info-row:first-child{border-top:none;}
+.info-val{color:var(--muted);font-size:11px;}
+.settings-about{text-align:center;color:var(--muted);font-size:10px;margin-top:18px;line-height:1.7;}
+.demo-note{
+  background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.2);
+  border-radius:10px;padding:10px 12px;font-size:10px;color:var(--gold);line-height:1.6;
+}
+
+/* ─── BOTTOM NAV ─── */
+.bottom-nav{
+  flex-shrink:0;height:calc(var(--nav-h) + var(--safe-bottom));
+  background:rgba(8,18,36,0.97);border-top:1px solid var(--border);
+  display:flex;align-items:flex-start;padding-top:8px;
+  backdrop-filter:blur(16px);z-index:100;
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  cursor:pointer;transition:.15s;padding:4px 0;border:none;background:none;
+}
+.nav-icon{font-size:20px;line-height:1;transition:.15s;}
+.nav-label{font-size:9px;color:var(--muted);letter-spacing:.5px;transition:.15s;}
+.nav-btn.active .nav-icon{filter:drop-shadow(0 0 6px var(--accent));}
+.nav-btn.active .nav-label{color:var(--accent);}
+.nav-badge{
+  position:relative;
+}
+.nav-badge::after{
+  content:attr(data-count);position:absolute;top:-4px;right:-8px;
+  background:var(--accent);color:#00101a;font-size:8px;font-weight:700;
+  border-radius:8px;padding:0 4px;min-width:14px;text-align:center;
+  display:none;
+}
+.nav-badge[data-count]:not([data-count=""])::after{display:block;}
+
+/* Leaflet popup dark */
+.leaflet-popup-content-wrapper{background:rgba(8,20,40,0.96);border:1px solid var(--border);color:var(--text);border-radius:11px;backdrop-filter:blur(8px);}
+.leaflet-popup-tip{background:rgba(8,20,40,0.96);}
+.leaflet-popup-content{margin:8px 12px;font-family:'Noto Sans JP',sans-serif;font-size:12px;}
+.ap-popup-code{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent);letter-spacing:1px;}
+.ap-popup-name{font-size:11px;color:var(--muted);}
+.ap-popup-reg{font-size:9px;color:var(--muted);margin-top:2px;}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:calc(var(--nav-h) + 14px + var(--safe-bottom));
+  left:50%;transform:translateX(-50%);
+  background:#1a0800;border:1px solid rgba(255,107,53,.4);color:#ff9966;
+  padding:7px 16px;border-radius:18px;font-size:11px;z-index:9999;
+  font-family:'Noto Sans JP',sans-serif;pointer-events:none;
+  opacity:0;transition:opacity .3s;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="header-brand">
+      <div class="header-plane">✈</div>
+      <div>
+        <div class="header-title">FLIGHT BOARD</div>
+        <div class="header-sub">国内線 時刻表</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-pill">
+        <div class="live-dot"></div>
+        <span id="liveTime">--:--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREENS -->
+  <div class="screens">
+
+    <!-- MAP SCREEN -->
+    <div class="screen active" id="screen-map">
+      <div id="map"></div>
+      <div class="map-hint" id="mapHint">
+        <span id="hintText">出発空港をタップ</span>
+      </div>
+      <div class="map-action">
+        <div class="route-summary" id="routeSummary">
+          <div class="rs-empty" id="rsEmpty">空港を2つ選択してください</div>
+          <div id="rsRoute" style="display:none;width:100%;display:none;align-items:center;gap:8px;">
+            <div class="rs-ap"><div class="rs-code dep" id="rsDepCode">---</div><div class="rs-name" id="rsDepName"></div></div>
+            <div class="rs-mid"><div class="rs-dur" id="rsDur"></div><div class="rs-arrow">✈ ─ ─ ─ ▶</div></div>
+            <div class="rs-ap"><div class="rs-code arr" id="rsArrCode">---</div><div class="rs-name" id="rsArrName"></div></div>
+          </div>
+        </div>
+        <div class="action-row">
+          <div class="date-field">
+            <label>出発日</label>
+            <input type="date" id="dateInput">
+          </div>
+          <button class="search-btn" id="searchBtn" disabled onclick="doSearch()">検索</button>
+          <button class="reset-btn" onclick="resetSelection()" title="リセット">↺</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS SCREEN -->
+    <div class="screen hidden-right" id="screen-results">
+      <div class="results-header">
+        <div class="filter-row" id="filterBar"></div>
+      </div>
+      <div class="results-meta" id="resultsMeta" style="display:none;">
+        <div class="meta-title" id="metaTitle"></div>
+        <select class="sort-sel" onchange="sortFlights(this.value)">
+          <option value="dep">出発順</option>
+          <option value="dur">所要時間順</option>
+        </select>
+      </div>
+      <div class="loading-screen" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-txt">検索中...</div>
+      </div>
+      <div class="no-results" id="noResults">
+        <div class="icon">✈</div>
+        <div>この区間の便は見つかりませんでした</div>
+      </div>
+      <div class="flights-list" id="flightsList"></div>
+    </div>
+
+    <!-- SETTINGS SCREEN -->
+    <div class="screen hidden-right" id="screen-settings">
+
+      <div class="settings-section">
+        <div class="settings-label">⭐ Amadeus API（推奨）</div>
+        <div class="settings-card">
+          <div class="api-row">
+            <div class="api-desc">JALと直接連携。日付指定で全便・運賃を取得できます。<br><a href="https://developers.amadeus.com/register" target="_blank" style="color:var(--accent)">developers.amadeus.com</a> で無料登録 → アプリ作成 → API Key + Secret を入力。</div>
+            <div style="margin-bottom:6px;">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">API Key (Client ID)</div>
+              <input class="api-input" id="amadeusKeyInput" type="text" placeholder="例: aBcDeFgHiJkLmNoPqRsT" spellcheck="false" autocomplete="off"/>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">API Secret (Client Secret)</div>
+              <div class="api-input-row">
+                <input class="api-input" id="amadeusSecretInput" type="password" placeholder="例: xYzAbCdEfGhIjKl" spellcheck="false" autocomplete="off"/>
+                <button class="api-save-btn" onclick="saveAmadeusKey()">保存</button>
+              </div>
+            </div>
+            <div class="api-status-row">
+              <div class="status-dot demo" id="amadeusApiDot"></div>
+              <span id="amadeusApiStatus">未設定</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">AirLabs API（フォールバック）</div>
+        <div class="settings-card">
+          <div class="api-row">
+            <div class="api-desc">月1000クエリ無料。Amadeusが未設定の場合に使用。</div>
+            <div class="api-input-row">
+              <input class="api-input" id="apikeyInput" type="text" placeholder="AirLabs APIキー" spellcheck="false" autocomplete="off"/>
+              <button class="api-save-btn" onclick="saveApiKey()">保存</button>
+            </div>
+            <div class="api-status-row">
+              <div class="status-dot demo" id="apiDot"></div>
+              <span id="apiStatusText">未設定</span>
+              <a class="api-link" href="https://airlabs.co/signup" target="_blank">無料取得 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">アプリ情報</div>
+        <div class="settings-card">
+          <div class="info-row"><span>空港数</span><span class="info-val" id="infoAirports">—</span></div>
+          <div class="info-row"><span>就航路線数</span><span class="info-val" id="infoRoutes">—</span></div>
+          <div class="info-row"><span>優先API</span><span class="info-val" id="infoApiMode">デモ</span></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="demo-note">
+          ⚠ Amadeus サンドボックスは無料ですが月の上限あり。本番環境への切り替えは有料です。
+        </div>
+      </div>
+
+      <div class="settings-about">
+        国内線 時刻表 · Amadeus / AirLabs API<br>
+        地図データ © OpenStreetMap contributors
+      </div>
+    </div>
+
+  </div><!-- screens -->
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <button class="nav-btn active" id="nav-map" onclick="switchTab('map')">
+      <div class="nav-icon">🗾</div>
+      <div class="nav-label">地図</div>
+    </button>
+    <button class="nav-btn" id="nav-results" onclick="switchTab('results')">
+      <div class="nav-icon nav-badge" id="resultsBadge">📋</div>
+      <div class="nav-label">時刻表</div>
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">
+      <div class="nav-icon">⚙️</div>
+      <div class="nav-label">設定</div>
+    </button>
+  </div>
+
+</div><!-- app -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  AIRPORT DATA
+// ══════════════════════════════════════════════
+const AIRPORTS = {
+  CTS:{name:'新千歳',full:'札幌(新千歳)',lat:42.775,lng:141.692,region:'北海道',rank:5},
+  OKD:{name:'丘珠',full:'札幌(丘珠)',lat:43.117,lng:141.381,region:'北海道',rank:3},
+  HKD:{name:'函館',full:'函館',lat:41.770,lng:140.822,region:'北海道',rank:3},
+  AKJ:{name:'旭川',full:'旭川',lat:43.671,lng:142.447,region:'北海道',rank:2},
+  SHB:{name:'中標津',full:'中標津(根室)',lat:43.577,lng:144.162,region:'北海道',rank:2},
+  MMB:{name:'女満別',full:'女満別(網走)',lat:43.880,lng:144.164,region:'北海道',rank:2},
+  MBE:{name:'紋別',full:'紋別',lat:44.304,lng:143.404,region:'北海道',rank:1},
+  OBO:{name:'帯広',full:'帯広',lat:42.733,lng:143.217,region:'北海道',rank:2},
+  KUH:{name:'釧路',full:'釧路',lat:43.041,lng:144.193,region:'北海道',rank:2},
+  WKJ:{name:'稚内',full:'稚内',lat:45.404,lng:141.800,region:'北海道',rank:1},
+  RIS:{name:'利尻',full:'利尻',lat:45.242,lng:141.186,region:'北海道',rank:1},
+  OIR:{name:'奥尻',full:'奥尻',lat:42.073,lng:139.433,region:'北海道',rank:1},
+  MSJ:{name:'三沢',full:'三沢',lat:40.703,lng:141.378,region:'東北',rank:2},
+  AOJ:{name:'青森',full:'青森',lat:40.734,lng:140.691,region:'東北',rank:2},
+  AXT:{name:'秋田',full:'秋田',lat:39.615,lng:140.219,region:'東北',rank:2},
+  SYO:{name:'庄内',full:'庄内(山形)',lat:38.812,lng:139.787,region:'東北',rank:1},
+  GAJ:{name:'山形',full:'山形',lat:38.412,lng:140.371,region:'東北',rank:1},
+  SDJ:{name:'仙台',full:'仙台',lat:38.140,lng:140.917,region:'東北',rank:3},
+  HNA:{name:'花巻',full:'花巻(岩手)',lat:39.431,lng:141.135,region:'東北',rank:1},
+  FKS:{name:'福島',full:'福島',lat:37.227,lng:140.431,region:'東北',rank:1},
+  HND:{name:'羽田',full:'東京(羽田)',lat:35.552,lng:139.780,region:'関東',rank:5},
+  NRT:{name:'成田',full:'東京(成田)',lat:35.764,lng:140.386,region:'関東',rank:4},
+  IBR:{name:'茨城',full:'茨城',lat:36.181,lng:140.415,region:'関東',rank:1},
+  OIM:{name:'大島',full:'大島(東京)',lat:34.782,lng:139.360,region:'関東離島',rank:1},
+  MYE:{name:'三宅島',full:'三宅島',lat:34.073,lng:139.559,region:'関東離島',rank:1},
+  HAC:{name:'八丈島',full:'八丈島',lat:33.115,lng:139.786,region:'関東離島',rank:1},
+  KIJ:{name:'新潟',full:'新潟',lat:37.957,lng:139.121,region:'中部',rank:3},
+  FSZ:{name:'静岡',full:'富士山静岡',lat:34.796,lng:138.189,region:'中部',rank:2},
+  NGO:{name:'中部',full:'名古屋(中部)',lat:34.858,lng:136.805,region:'中部',rank:4},
+  NKM:{name:'名古屋',full:'名古屋(小牧)',lat:35.255,lng:136.924,region:'中部',rank:2},
+  MMJ:{name:'松本',full:'松本',lat:36.167,lng:137.923,region:'中部',rank:1},
+  KMQ:{name:'小松',full:'小松(金沢)',lat:36.394,lng:136.407,region:'北陸',rank:2},
+  TOY:{name:'富山',full:'富山',lat:36.648,lng:137.188,region:'北陸',rank:2},
+  NTQ:{name:'能登',full:'能登',lat:37.293,lng:136.962,region:'北陸',rank:1},
+  ITM:{name:'伊丹',full:'大阪(伊丹)',lat:34.785,lng:135.438,region:'近畿',rank:5},
+  KIX:{name:'関西',full:'大阪(関空)',lat:34.435,lng:135.244,region:'近畿',rank:4},
+  UKB:{name:'神戸',full:'神戸',lat:34.633,lng:135.224,region:'近畿',rank:3},
+  SHM:{name:'南紀白浜',full:'南紀白浜',lat:33.662,lng:135.364,region:'近畿',rank:1},
+  TTJ:{name:'鳥取',full:'鳥取',lat:35.530,lng:134.167,region:'中国',rank:1},
+  OKJ:{name:'岡山',full:'岡山',lat:34.757,lng:133.855,region:'中国',rank:2},
+  HIJ:{name:'広島',full:'広島',lat:34.436,lng:132.919,region:'中国',rank:3},
+  IWK:{name:'岩国',full:'岩国',lat:34.146,lng:132.237,region:'中国',rank:2},
+  YGJ:{name:'米子',full:'米子鬼太郎',lat:35.492,lng:133.236,region:'中国',rank:1},
+  OKI:{name:'隠岐',full:'隠岐',lat:36.181,lng:133.325,region:'中国',rank:1},
+  IZO:{name:'出雲',full:'出雲',lat:35.413,lng:132.890,region:'中国',rank:1},
+  IWJ:{name:'石見',full:'石見(益田)',lat:34.676,lng:131.790,region:'中国',rank:1},
+  UBJ:{name:'山口宇部',full:'山口宇部',lat:33.930,lng:131.279,region:'中国',rank:1},
+  TKS:{name:'徳島',full:'徳島',lat:34.133,lng:134.607,region:'四国',rank:1},
+  TAK:{name:'高松',full:'高松',lat:34.214,lng:134.016,region:'四国',rank:2},
+  MYJ:{name:'松山',full:'松山',lat:33.828,lng:132.700,region:'四国',rank:2},
+  KCZ:{name:'高知',full:'高知龍馬',lat:33.546,lng:133.669,region:'四国',rank:2},
+  FUK:{name:'福岡',full:'福岡',lat:33.585,lng:130.451,region:'九州',rank:5},
+  KKJ:{name:'北九州',full:'北九州',lat:33.845,lng:130.977,region:'九州',rank:2},
+  HSG:{name:'佐賀',full:'佐賀',lat:33.149,lng:130.302,region:'九州',rank:2},
+  NGS:{name:'長崎',full:'長崎',lat:32.917,lng:129.914,region:'九州',rank:3},
+  OIT:{name:'大分',full:'大分',lat:33.479,lng:131.737,region:'九州',rank:2},
+  KMJ:{name:'熊本',full:'熊本',lat:32.837,lng:130.855,region:'九州',rank:2},
+  KMI:{name:'宮崎',full:'宮崎',lat:31.877,lng:131.449,region:'九州',rank:2},
+  KOJ:{name:'鹿児島',full:'鹿児島',lat:31.804,lng:130.719,region:'九州',rank:3},
+  TSJ:{name:'対馬',full:'対馬',lat:34.284,lng:129.330,region:'九州離島',rank:1},
+  IKI:{name:'壱岐',full:'壱岐',lat:33.749,lng:129.785,region:'九州離島',rank:1},
+  OKA:{name:'那覇',full:'那覇(沖縄)',lat:26.195,lng:127.646,region:'沖縄',rank:5},
+  MMY:{name:'宮古',full:'宮古島',lat:24.783,lng:125.295,region:'沖縄',rank:3},
+  ISG:{name:'石垣',full:'新石垣',lat:24.396,lng:124.187,region:'沖縄',rank:3},
+  UEO:{name:'久米島',full:'久米島',lat:26.363,lng:126.714,region:'沖縄',rank:1},
+  MMD:{name:'南大東',full:'南大東',lat:25.846,lng:131.263,region:'沖縄離島',rank:1},
+  KTD:{name:'北大東',full:'北大東',lat:25.945,lng:131.327,region:'沖縄離島',rank:1},
+  SHI:{name:'下地島',full:'下地島',lat:24.827,lng:125.145,region:'沖縄',rank:1},
+  TRA:{name:'多良間',full:'多良間',lat:24.665,lng:124.675,region:'沖縄離島',rank:1},
+  ASJ:{name:'奄美',full:'奄美大島',lat:28.430,lng:129.713,region:'南西諸島',rank:2},
+  TKN:{name:'徳之島',full:'徳之島',lat:27.836,lng:128.880,region:'南西諸島',rank:1},
+  OKE:{name:'沖永良部',full:'沖永良部',lat:27.425,lng:128.700,region:'南西諸島',rank:1},
+  RNJ:{name:'与論',full:'与論島',lat:27.044,lng:128.402,region:'南西諸島',rank:1},
+  KUM:{name:'屋久島',full:'屋久島',lat:30.385,lng:130.659,region:'南西諸島',rank:1},
+  TNE:{name:'種子島',full:'種子島',lat:30.604,lng:130.991,region:'南西諸島',rank:1},
+  OGN:{name:'与那国',full:'与那国',lat:24.467,lng:123.015,region:'沖縄離島',rank:1},
+};
+
+const ROUTES = new Set([
+  'HND-CTS','HND-HKD','HND-AKJ','HND-MMB','HND-OBO','HND-KUH','HND-WKJ','HND-SHB','HND-MBE',
+  'HND-MSJ','HND-AOJ','HND-AXT','HND-SDJ','HND-HNA','HND-SYO','HND-GAJ','HND-FKS',
+  'HND-KIJ','HND-FSZ','HND-NGO','HND-NKM','HND-MMJ','HND-KMQ','HND-TOY',
+  'HND-ITM','HND-KIX','HND-UKB','HND-SHM',
+  'HND-TTJ','HND-OKJ','HND-HIJ','HND-IWK','HND-YGJ','HND-IZO','HND-IWJ','HND-UBJ',
+  'HND-TKS','HND-TAK','HND-MYJ','HND-KCZ',
+  'HND-FUK','HND-KKJ','HND-HSG','HND-NGS','HND-OIT','HND-KMJ','HND-KMI','HND-KOJ',
+  'HND-OKA','HND-MMY','HND-ISG','HND-ASJ','HND-OIM','HND-MYE','HND-HAC',
+  'NRT-CTS','NRT-FUK','NRT-OKA','NRT-NGO','NRT-ITM','NRT-KIX','NRT-SDJ','NRT-KOJ','NRT-ASJ','NRT-MMY','NRT-ISG','NRT-HSG',
+  'ITM-CTS','ITM-HKD','ITM-AKJ','ITM-MMB','ITM-OBO','ITM-KUH','ITM-SHB',
+  'ITM-MSJ','ITM-AOJ','ITM-AXT','ITM-SDJ','ITM-GAJ','ITM-SYO','ITM-FKS',
+  'ITM-KIJ','ITM-NGO','ITM-FUK','ITM-KKJ','ITM-NGS','ITM-OIT','ITM-KMJ','ITM-KMI','ITM-KOJ',
+  'ITM-OKA','ITM-MMY','ITM-ISG','ITM-ASJ',
+  'KIX-OKA','KIX-CTS','KIX-FUK','KIX-SDJ','KIX-NGS','KIX-KMI','KIX-KOJ','KIX-MMY','KIX-ISG','KIX-ASJ','KIX-HSG',
+  'UKB-CTS','UKB-SDJ','UKB-AXT','UKB-FUK','UKB-OKA','UKB-KMI','UKB-KOJ','UKB-ASJ',
+  'NGO-CTS','NGO-HKD','NGO-AOJ','NGO-AXT','NGO-SDJ','NGO-FUK','NGO-NGS','NGO-KMJ','NGO-KMI','NGO-KOJ','NGO-OKA','NGO-MMY','NGO-ASJ',
+  'NKM-AOJ','NKM-AXT','NKM-SDJ','NKM-FKS','NKM-KIJ','NKM-MMJ','NKM-KMQ','NKM-TOY','NKM-OKJ','NKM-MYJ','NKM-KCZ','NKM-FUK','NKM-KMJ','NKM-KMI','NKM-KOJ',
+  'FUK-CTS','FUK-HKD','FUK-AKJ','FUK-SDJ','FUK-AOJ','FUK-AXT','FUK-KIJ','FUK-NGO','FUK-HIJ','FUK-OKJ','FUK-OKA','FUK-MMY','FUK-ISG','FUK-KOJ','FUK-ASJ','FUK-TSJ','FUK-IKI',
+  'OKA-CTS','OKA-SDJ','OKA-NGO','OKA-HIJ','OKA-FUK','OKA-KOJ','OKA-KMI','OKA-MMY','OKA-ISG','OKA-UEO','OKA-ASJ','OKA-TKN','OKA-OKE','OKA-RNJ','OKA-OGN','OKA-MMD','OKA-KTD','OKA-SHI',
+  'KOJ-OKA','KOJ-ASJ','KOJ-TKN','KOJ-OKE','KOJ-RNJ','KOJ-KUM','KOJ-TNE','KOJ-FUK','KOJ-SDJ',
+  'KMI-CTS','KMI-SDJ','KMI-NGO','KMI-OKA',
+  'KMJ-CTS','KMJ-SDJ','KMJ-OKA',
+  'NGS-CTS','NGS-SDJ','NGS-OKA','NGS-TSJ','NGS-IKI',
+  'OIT-CTS','OIT-SDJ','OIT-OKA',
+  'MMY-ISG','MMY-OKA','MMY-TRA',
+  'ISG-OKA','ISG-OGN','ISG-MMY',
+  'ASJ-OKA','ASJ-KOJ',
+  'KMQ-CTS','KMQ-SDJ','KMQ-FUK','KMQ-OKA',
+  'TOY-HND','TOY-CTS','TOY-FUK','TOY-OKA',
+  'HIJ-CTS','HIJ-SDJ','HIJ-NGO','HIJ-OKA','HIJ-FUK',
+  'IWK-HND','IWK-ITM','TTJ-HND',
+  'OKI-ITM','OKI-IZO','OKI-YGJ',
+  'SHM-HND','SHM-ITM','IWJ-HND','IWJ-ITM','MSJ-HND','MSJ-ITM',
+  'KIJ-HND','KIJ-ITM','KIJ-CTS','KIJ-FUK','KIJ-OKA','KIJ-OKD','KIJ-NKM',
+  'FKS-HND','FKS-ITM','FKS-NKM',
+  'HAC-HND','OIM-HND','MYE-HND',
+  'HSG-HND','HSG-NRT','HSG-CTS','HSG-KIX',
+  'CTS-HKD','CTS-AKJ','CTS-MMB','CTS-OBO','CTS-KUH','CTS-WKJ','CTS-SHB','CTS-MBE',
+  'OKD-HND','OKD-KIJ','OKD-NGS',
+  'TRA-OKA','TRA-MMY','MMD-OKA','KTD-OKA','RNJ-OKA','RNJ-KOJ',
+]);
+
+function hasRoute(a, b){return ROUTES.has(`${a}-${b}`)||ROUTES.has(`${b}-${a}`);}
+
+const AIRLINES = [
+  {code:'ANA',name:'全日空(ANA)',          short:'ANA',color:'#00a0e9',bg:'#00255a'},
+  {code:'JAL',name:'日本航空(JAL)',        short:'JAL',color:'#e0002b',bg:'#330008'},
+  {code:'SKY',name:'スカイマーク',         short:'SKY',color:'#4499dd',bg:'#001840'},
+  {code:'ADO',name:'AIRDO',              short:'ADO',color:'#5588cc',bg:'#001235'},
+  {code:'SFJ',name:'スターフライヤー',      short:'SFJ',color:'#aaaaaa',bg:'#181818'},
+  {code:'SNJ',name:'ソラシドエア',         short:'6J', color:'#00bbaa',bg:'#003530'},
+  {code:'APJ',name:'Peach',              short:'MM', color:'#ff3377',bg:'#400018'},
+  {code:'JJP',name:'ジェットスター・ジャパン',short:'GK',color:'#ff6600',bg:'#2a1200'},
+  {code:'FBZ',name:'フジドリーム(FDA)',    short:'FDA',color:'#cc3344',bg:'#2a0010'},
+];
+
+const AIRLINE_MAP = {
+  'NH':{code:'ANA',name:'全日空(ANA)',           short:'ANA',color:'#00a0e9',bg:'#00255a'},
+  'JL':{code:'JAL',name:'日本航空(JAL)',         short:'JAL',color:'#e0002b',bg:'#330008'},
+  'BC':{code:'SKY',name:'スカイマーク',          short:'SKY',color:'#4499dd',bg:'#001840'},
+  'HD':{code:'ADO',name:'AIRDO',               short:'ADO',color:'#5588cc',bg:'#001235'},
+  '7G':{code:'SFJ',name:'スターフライヤー',       short:'SFJ',color:'#aaaaaa',bg:'#181818'},
+  '6J':{code:'SNJ',name:'ソラシドエア',          short:'6J', color:'#00bbaa',bg:'#003530'},
+  'MM':{code:'APJ',name:'Peach',               short:'MM', color:'#ff3377',bg:'#400018'},
+  'GK':{code:'JJP',name:'ジェットスター・ジャパン',short:'GK',color:'#ff6600',bg:'#2a1200'},
+  'IP':{code:'FBZ',name:'フジドリーム(FDA)',     short:'FDA',color:'#cc3344',bg:'#2a0010'},
+  'NU':{code:'JAL',name:'日本航空(JAL)',         short:'JAL',color:'#e0002b',bg:'#330008'},
+  'JC':{code:'JAL',name:'日本航空(JAL)',         short:'JAL',color:'#e0002b',bg:'#330008'},
+  'HA':{code:'JAL',name:'日本航空(JAL)',         short:'JAL',color:'#e0002b',bg:'#330008'},
+  'HB':{code:'JAL',name:'日本航空(JAL)',         short:'JAL',color:'#e0002b',bg:'#330008'},
+  'RAC':{code:'JAL',name:'日本航空(JAL)',        short:'JAL',color:'#e0002b',bg:'#330008'},
+  'EH':{code:'ANA',name:'全日空(ANA)',           short:'ANA',color:'#00a0e9',bg:'#00255a'},
+  'NQ':{code:'ANA',name:'全日空(ANA)',           short:'ANA',color:'#00a0e9',bg:'#00255a'},
+};
+function getAirlineByIata(iata){return AIRLINE_MAP[iata]||null;}
+
+// ── Utils
+function fmtDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+function seededRng(s){s=s>>>0;return()=>{s=(Math.imul(1664525,s)+1013904223)>>>0;return s/4294967296;};}
+function hashStr(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(16777619,h)>>>0;}return h;}
+function fmtTime(m){return`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
+function fmtDur(m){return`${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}m`;}
+function haversine(a,b){const R=6371,toR=d=>d*Math.PI/180,dLat=toR(b.lat-a.lat),dLng=toR(b.lng-a.lng),x=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+
+// ── Demo flight generation
+function generateFlights(from,to,date){
+  if(from===to||!hasRoute(from,to))return[];
+  const rng=seededRng(hashStr(from+to+date));
+  const ri=()=>rng(),rn=n=>Math.floor(rng()*n);
+  const dist=haversine(AIRPORTS[from],AIRPORTS[to]);
+  const baseDur=Math.round(40 + dist * 0.065);
+  const rankA=AIRPORTS[from].rank,rankB=AIRPORTS[to].rank;
+  const routeRank=rankA+rankB;
+  const count=routeRank>=10?26+rn(5):routeRank>=9?16+rn(5):routeRank>=8?10+rn(4):routeRank>=6?5+rn(4):2+rn(3);
+  const pool=routeRank>=9?AIRLINES.slice(0,2):routeRank>=8?AIRLINES.slice(0,5):routeRank>=6?AIRLINES.slice(0,4):AIRLINES.slice(0,3);
+  const basePrice=Math.round((5000+dist*28)/500)*500;
+
+  // 全スロット生成（6:00〜21:30、10分刻み）→Fisher-Yatesシャッフル→先頭から採用
+  const slots=[];
+  for(let m=360;m<=1290;m+=10)slots.push(m);
+  for(let i=slots.length-1;i>0;i--){
+    const j=Math.floor(rng()*(i+1));
+    [slots[i],slots[j]]=[slots[j],slots[i]];
+  }
+  const times=[];
+  for(const t of slots){
+    if(times.length>=count)break;
+    if(times.every(u=>Math.abs(u-t)>=10))times.push(t);
+  }
+  times.sort((a,b)=>a-b);
+
+  return times.map((dep,i)=>{
+    const al=pool[Math.floor(ri()*pool.length)];
+    const dur=baseDur+Math.round((ri()-0.5)*14);
+    const price=Math.round(basePrice*(0.55+ri()*0.7)/500)*500;
+    const fnum=al.short+(100+rn(800));
+    return{dep,arr:dep+dur,airline:al,fnum,dur,price,idx:i};
+  });
+}
+function getSeat(f){const tb=Math.floor(Date.now()/30000);let s=hashStr(f.fnum+tb);s=((s*1103515245)+12345)&0x7fffffff;const v=s%100;if(v<55)return{text:'余裕あり',cls:'ok',ic:'○'};if(v<80)return{text:'残りわずか',cls:'few',ic:'△'};return{text:'満席',cls:'none',ic:'✕'};}
+
+// ── MAP
+const map=L.map('map',{center:[36,136],zoom:5,minZoom:4,maxZoom:10,zoomControl:false});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19}).addTo(map);
+
+let routeLine=null;
+const markers={};
+let selDep=null,selArr=null;
+
+Object.entries(AIRPORTS).forEach(([code,ap])=>{
+  const el=document.createElement('div');
+  el.className='ap-marker';el.textContent=code;
+  const icon=L.divIcon({html:el,className:'',iconSize:[30,30],iconAnchor:[15,15]});
+  const m=L.marker([ap.lat,ap.lng],{icon}).addTo(map);
+  m.on('click',()=>onAirportClick(code));
+  m._el=el;markers[code]=m;
+});
+
+function onAirportClick(code){
+  if(!selDep){
+    selDep=code;markers[code]._el.classList.add('dep');
+    updateHint();updateRouteSummary();
+  } else if(!selArr&&code!==selDep){
+    if(!currentApiKey&&!hasRoute(selDep,code)){
+      const el=markers[code]._el;
+      el.style.borderColor='#f00';el.style.color='#f00';
+      setTimeout(()=>{el.style.borderColor='';el.style.color='';},600);
+      showToast(`${selDep}〜${code} の就航路線なし`);return;
+    }
+    selArr=code;markers[code]._el.classList.add('arr');
+    drawRoute();updateHint();updateRouteSummary();
+    document.getElementById('searchBtn').disabled=false;
+  } else if(code===selDep){
+    resetSelection();
+  } else {
+    if(!currentApiKey&&!hasRoute(selDep,code)){showToast(`${selDep}〜${code} の就航路線なし`);return;}
+    markers[selArr]._el.classList.remove('arr');
+    selArr=code;markers[code]._el.classList.add('arr');
+    drawRoute();updateHint();updateRouteSummary();
+    document.getElementById('searchBtn').disabled=false;
+  }
+}
+
+function drawRoute(){
+  if(routeLine)map.removeLayer(routeLine);
+  if(!selDep||!selArr)return;
+  const a=AIRPORTS[selDep],b=AIRPORTS[selArr];
+  const pts=[];
+  for(let t=0;t<=1;t+=0.05){
+    pts.push([a.lat+(b.lat-a.lat)*t+Math.sin(t*Math.PI)*0.4,a.lng+(b.lng-a.lng)*t]);
+  }
+  routeLine=L.polyline(pts,{color:'#00d4ff',weight:1.5,opacity:.6,dashArray:'6 5'}).addTo(map);
+  map.fitBounds([[a.lat,a.lng],[b.lat,b.lng]],{padding:[60,60]});
+}
+
+function resetSelection(){
+  if(selDep)markers[selDep]._el.classList.remove('dep');
+  if(selArr)markers[selArr]._el.classList.remove('arr');
+  selDep=null;selArr=null;
+  if(routeLine){map.removeLayer(routeLine);routeLine=null;}
+  document.getElementById('searchBtn').disabled=true;
+  updateHint();updateRouteSummary();
+}
+
+function updateHint(){
+  const txt=document.getElementById('hintText');
+  if(!selDep)txt.innerHTML='出発空港をタップ';
+  else if(!selArr)txt.innerHTML=`<span class="hint-dep">✈ ${selDep}</span><span class="hint-sep"> › </span>到着空港をタップ`;
+  else txt.innerHTML=`<span class="hint-dep">✈ ${selDep}</span><span class="hint-sep"> › </span><span class="hint-arr">${selArr} ✈</span>`;
+}
+
+function updateRouteSummary(){
+  const empty=document.getElementById('rsEmpty');
+  const route=document.getElementById('rsRoute');
+  if(!selDep){empty.style.display='';route.style.display='none';return;}
+  empty.style.display='none';route.style.display='flex';
+  document.getElementById('rsDepCode').textContent=selDep;
+  document.getElementById('rsDepName').textContent=AIRPORTS[selDep]?.name||'';
+  if(selArr){
+    document.getElementById('rsArrCode').textContent=selArr;
+    document.getElementById('rsArrName').textContent=AIRPORTS[selArr]?.name||'';
+    const dist=Math.round(haversine(AIRPORTS[selDep],AIRPORTS[selArr]));
+    document.getElementById('rsDur').textContent=`約${Math.round(40 + dist * 0.065)}分 · ${dist}km`;
+  } else {
+    document.getElementById('rsArrCode').textContent='---';
+    document.getElementById('rsArrName').textContent='';
+    document.getElementById('rsDur').textContent='';
+  }
+}
+
+// ── SEARCH STATE
+let curFlights=[],curFrom='',curTo='',curDate='',activeFilter='all',dataSource='demo';
+let seatTimer=null;
+let routesCache={key:null, data:null};
+
+function doSearch(){
+  if(!selDep||!selArr)return;
+  const date=document.getElementById('dateInput').value;
+  if(!date){showToast('出発日を選択してください');return;}
+  runSearch(selDep,selArr,date);
+  switchTab('results');
+}
+
+// ── RENDER
+function renderFilterBar(){
+  const bar=document.getElementById('filterBar');bar.innerHTML='';
+  [{k:'all',l:'すべて'},{k:'morning',l:'朝〜9時'},{k:'midday',l:'昼9-17時'},{k:'evening',l:'夜17時〜'}].forEach(f=>{
+    const c=document.createElement('div');
+    c.className='filter-chip'+(f.k===activeFilter?' active':'');
+    c.textContent=f.l;
+    c.onclick=()=>{activeFilter=f.k;renderFilterBar();applyFilter();};
+    bar.appendChild(c);
+  });
+}
+
+function applyFilter(){
+  let f=[...curFlights];
+  if(activeFilter==='morning')f=f.filter(x=>x.dep<540);
+  else if(activeFilter==='midday')f=f.filter(x=>x.dep>=540&&x.dep<1020);
+  else if(activeFilter==='evening')f=f.filter(x=>x.dep>=1020);
+  renderFlightCards(f,dataSource==='live');
+}
+
+function sortFlights(by){
+  const s=[...curFlights];
+  if(by==='dep')s.sort((a,b)=>a.dep-b.dep);
+  else if(by==='dur')s.sort((a,b)=>a.dur-b.dur);
+  renderFlightCards(s,dataSource==='live');
+}
+
+function renderFlights(flights,from,to,date,isReal=false){
+  const meta=document.getElementById('resultsMeta');
+  const title=document.getElementById('metaTitle');
+  const d=new Date(date+'T00:00:00');
+  const dw=['日','月','火','水','木','金','土'];
+  const srcLbl=isReal?`<span style="color:var(--green);font-size:9px">● LIVE</span>`:`<span style="color:var(--gold);font-size:9px">○ デモ</span>`;
+  title.innerHTML=`<strong>${AIRPORTS[from].full}→${AIRPORTS[to].full}</strong> ${srcLbl}<br>${d.getMonth()+1}/${d.getDate()}(${dw[d.getDay()]}) · ${flights.length}便`;
+  meta.style.display='flex';
+  document.getElementById('resultsBadge').dataset.count=flights.length>0?flights.length:'';
+  renderFlightCards(flights,isReal);
+}
+
+function renderFlightCards(flights,isReal=false){
+  const list=document.getElementById('flightsList');
+  const noRes=document.getElementById('noResults');
+  list.innerHTML='';
+  if(!flights.length){noRes.style.display='flex';return;}
+  noRes.style.display='none';
+  flights.forEach((f,i)=>{
+    const card=document.createElement('div');
+    card.className='flight-card';
+    card.style.animationDelay=`${i*20}ms`;
+    card.dataset.fnum=f.fnum;
+    let statusHtml='';
+    if(isReal){
+      if(f.status==='en-route')statusHtml=`<div style="color:var(--green);font-size:8px">✈ 飛行中</div>`;
+      else if(f.status==='landed')statusHtml=`<div style="color:var(--muted);font-size:8px">到着済</div>`;
+      else if(f.status==='cancelled')statusHtml=`<div style="color:#f55;font-size:8px">欠航</div>`;
+      else if(f.status==='delayed'||f.delayed>0)statusHtml=`<div style="color:var(--orange);font-size:8px">遅延+${f.delayed}分</div>`;
+    } else {
+      const seat=getSeat(f);
+      statusHtml=`<div class="avail ${seat.cls}">${seat.ic} ${seat.text}</div>`;
+    }
+    const prHtml=isReal&&f.price
+      ?`<div class="pr-num">¥${f.price.toLocaleString()}</div><div class="pr-unit">税込</div><div class="src-badge live">LIVE</div>`
+      :isReal
+      ?`<div class="src-badge live">LIVE</div>`
+      :`<div class="pr-num">¥${f.price.toLocaleString()}</div><div class="pr-unit">税込</div><div class="src-badge demo">DEMO</div>`;
+    card.innerHTML=`
+      <div>
+        <div class="al-logo" style="background:${f.airline.bg};color:${f.airline.color};border:1px solid ${f.airline.color}44">${f.airline.short}</div>
+        <div class="al-fnum">${f.fnum}</div>
+      </div>
+      <div class="time-col">
+        <div class="t-block"><div class="t-time">${fmtTime(f.dep)}</div><div class="t-code">${curFrom}</div></div>
+        <div class="t-mid">
+          <div class="t-dur">${fmtDur(f.dur)}</div>
+          <div class="t-line"><div class="t-bar"></div><div class="t-plane">✈</div><div class="t-bar"></div></div>
+        </div>
+        <div class="t-block"><div class="t-time">${fmtTime(f.arr)}</div><div class="t-code">${curTo}</div></div>
+      </div>
+      <div class="pr-col">${prHtml}${statusHtml}</div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function startSeatRefresh(){
+  if(seatTimer)clearInterval(seatTimer);
+  seatTimer=setInterval(()=>{
+    document.querySelectorAll('.flight-card').forEach(card=>{
+      const f=curFlights.find(x=>x.fnum===card.dataset.fnum);if(!f)return;
+      const seat=getSeat(f);const el=card.querySelector('.avail');
+      if(el){el.textContent=`${seat.ic} ${seat.text}`;el.className=`avail ${seat.cls}`;}
+    });
+  },30000);
+}
+
+// ══════════════════════════════════════════════
+//  AMADEUS API
+// ══════════════════════════════════════════════
+let amadeusKey=localStorage.getItem('amadeus_key')||'';
+let amadeusSecret=localStorage.getItem('amadeus_secret')||'';
+let amadeusToken=null;
+let amadeusTokenExpiry=0;
+
+function saveAmadeusKey(){
+  amadeusKey=document.getElementById('amadeusKeyInput').value.trim();
+  amadeusSecret=document.getElementById('amadeusSecretInput').value.trim();
+  localStorage.setItem('amadeus_key',amadeusKey);
+  localStorage.setItem('amadeus_secret',amadeusSecret);
+  amadeusToken=null;amadeusTokenExpiry=0;
+  if(amadeusKey&&amadeusSecret){
+    setAmadeusStatus('checking','接続確認中...');
+    getAmadeusToken().then(tok=>{
+      if(tok){setAmadeusStatus('live','Amadeus接続済み ✓');}
+      else setAmadeusStatus('error','認証失敗 — キー/シークレットを確認');
+      updateApiModeLabel();
+    });
+  } else {
+    setAmadeusStatus('demo','未設定');updateApiModeLabel();
+  }
+}
+
+function setAmadeusStatus(state,msg){
+  document.getElementById('amadeusApiDot').className='status-dot '+(state==='live'?'live':state==='error'?'err':'demo');
+  document.getElementById('amadeusApiStatus').textContent=msg;
+}
+
+function updateApiModeLabel(){
+  const el=document.getElementById('infoApiMode');if(!el)return;
+  el.textContent=(amadeusKey&&amadeusSecret)?'Amadeus':currentApiKey?'AirLabs':'デモ';
+}
+
+async function getAmadeusToken(){
+  if(amadeusToken&&Date.now()<amadeusTokenExpiry)return amadeusToken;
+  if(!amadeusKey||!amadeusSecret)return null;
+  try{
+    const res=await fetch('https://test.api.amadeus.com/v1/security/oauth2/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`grant_type=client_credentials&client_id=${encodeURIComponent(amadeusKey)}&client_secret=${encodeURIComponent(amadeusSecret)}`
+    });
+    const json=await res.json();
+    if(!json.access_token)return null;
+    amadeusToken=json.access_token;
+    amadeusTokenExpiry=Date.now()+(json.expires_in-60)*1000;
+    return amadeusToken;
+  }catch(e){return null;}
+}
+
+function parseDuration(iso){
+  const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  return(parseInt(m?.[1]||0)*60)+(parseInt(m?.[2]||0));
+}
+
+async function fetchAmadeusFlights(from,to,date){
+  const token=await getAmadeusToken();
+  if(!token)return null;
+  try{
+    const url=`https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${from}&destinationLocationCode=${to}&departureDate=${date}&adults=1&nonStop=true&max=250&currencyCode=JPY`;
+    const res=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});
+    const json=await res.json();
+    if(!json.data||!json.data.length)return null;
+    const seen=new Set();
+    const flights=[];
+    for(const offer of json.data){
+      const seg=offer.itineraries[0].segments[0];
+      const depDt=new Date(seg.departure.at);
+      const arrDt=new Date(seg.arrival.at);
+      const dep=depDt.getHours()*60+depDt.getMinutes();
+      const arr=arrDt.getHours()*60+arrDt.getMinutes();
+      const carrierCode=seg.operating?.carrierCode||seg.carrierCode;
+      const fnum=(seg.carrierCode+seg.number).toUpperCase();
+      const dur=parseDuration(offer.itineraries[0].duration);
+      const price=Math.round(parseFloat(offer.price.grandTotal));
+      const airline=getAirlineByIata(carrierCode)||getAirlineByIata(seg.carrierCode)||{code:carrierCode,name:carrierCode,short:carrierCode,color:'#aaa',bg:'#222'};
+      if(seen.has(fnum))continue;
+      seen.add(fnum);
+      flights.push({dep,arr,airline,fnum,dur,price,idx:flights.length,status:'scheduled',delayed:0,isReal:true});
+    }
+    flights.sort((a,b)=>a.dep-b.dep);
+    return flights.length?flights:null;
+  }catch(e){return null;}
+}
+
+// ══════════════════════════════════════════════
+//  AIRLABS API
+// ══════════════════════════════════════════════
+let currentApiKey=localStorage.getItem('airlabs_key')||'';
+
+function saveApiKey(){
+  const key=document.getElementById('apikeyInput').value.trim();
+  currentApiKey=key;localStorage.setItem('airlabs_key',key);
+  if(key){setApiStatus('checking','接続確認中...');testApiKey(key);}
+  else{setApiStatus('demo','未設定');updateApiModeLabel();}
+}
+
+function setApiStatus(state,msg){
+  document.getElementById('apiDot').className='status-dot '+(state==='live'?'live':state==='error'?'err':'demo');
+  document.getElementById('apiStatusText').textContent=msg;
+}
+
+async function testApiKey(key){
+  try{
+    const res=await fetch(`https://airlabs.co/api/v9/schedules?dep_iata=HND&api_key=${key}&limit=1`);
+    const json=await res.json();
+    if(json.error){setApiStatus('error',`エラー: ${json.error.message||'無効なキー'}`);}
+    else{setApiStatus('live','AirLabs接続済み ✓');updateApiModeLabel();}
+  }catch(e){setApiStatus('error','接続エラー');}
+}
+
+async function fetchRoutes(from,to){
+  if(!currentApiKey)return null;
+  try{
+    const res=await fetch(`https://airlabs.co/api/v9/routes?dep_iata=${from}&arr_iata=${to}&api_key=${currentApiKey}&limit=500`);
+    const json=await res.json();
+    if(json.error||!json.response)return null;
+    return json.response;
+  }catch(e){return null;}
+}
+
+function parseRouteEntry(entry,idx){
+  const toMin=str=>{if(!str)return null;const[h,m]=str.split(':').map(Number);return h*60+m;};
+  const dep=toMin(entry.dep_time);if(dep===null)return null;
+  if(!AIRLINE_MAP[entry.airline_iata])return null;
+  const dur=entry.duration||90;
+  const arr=entry.arr_time?toMin(entry.arr_time):dep+dur;
+  const airline=getAirlineByIata(entry.airline_iata||'');
+  return{dep,arr,airline,fnum:entry.flight_iata||entry.flight_icao||'—',dur,price:null,idx,status:'scheduled',delayed:0,isReal:true};
+}
+
+function dedup(flights){
+  const seen=new Set();
+  return flights.filter(f=>{if(seen.has(f.fnum))return false;seen.add(f.fnum);return true;});
+}
+
+// ── MAIN SEARCH
+async function runSearch(from,to,date){
+  curFrom=from;curTo=to;curDate=date;activeFilter='all';
+  const loading=document.getElementById('loading');
+  const list=document.getElementById('flightsList');
+  const noRes=document.getElementById('noResults');
+  loading.style.display='flex';list.innerHTML='';noRes.style.display='none';
+  document.getElementById('resultsMeta').style.display='none';
+
+  let flights=null;
+  let isReal=false;
+
+  // 1) Amadeus優先
+  if(amadeusKey&&amadeusSecret){
+    setAmadeusStatus('checking','取得中...');
+    flights=await fetchAmadeusFlights(from,to,date);
+    if(flights){
+      isReal=true;dataSource='live';
+      setAmadeusStatus('live',`Amadeus: ${flights.length}便`);
+    } else {
+      setAmadeusStatus('error','取得失敗 → AirLabs/デモへ');
+    }
+  }
+
+  // 2) AirLabsフォールバック
+  if(!flights&&currentApiKey){
+    const cacheKey=`${from}-${to}`;
+    if(routesCache.key!==cacheKey){
+      setApiStatus('checking','取得中...');
+      routesCache.data=await fetchRoutes(from,to);
+      routesCache.key=cacheKey;
+    }
+    const routesData=routesCache.data;
+    if(routesData&&routesData.length>0){
+      let parsed=routesData.map((e,i)=>parseRouteEntry(e,i)).filter(Boolean);
+      parsed=dedup(parsed);parsed.sort((a,b)=>a.dep-b.dep);
+      flights=parsed;isReal=true;dataSource='live';
+      setApiStatus('live',`AirLabs: ${parsed.length}便`);
+    } else {
+      setApiStatus('error','実データなし → デモ');
+    }
+  }
+
+  // 3) デモ
+  if(!flights){flights=generateFlights(from,to,date);dataSource='demo';}
+
+  loading.style.display='none';
+  curFlights=flights;
+  renderFilterBar();
+  renderFlights(curFlights,from,to,date,isReal);
+  if(!isReal)startSeatRefresh();
+}
+
+// ── TAB SWITCHING
+let currentTab='map';
+function switchTab(tab){
+  const screens={map:'screen-map',results:'screen-results',settings:'screen-settings'};
+  const navBtns={map:'nav-map',results:'nav-results',settings:'nav-settings'};
+  const tabs=['map','results','settings'];
+  Object.entries(screens).forEach(([t,id])=>{
+    const el=document.getElementById(id);
+    if(t===tab)el.className='screen active';
+    else if(tabs.indexOf(t)<tabs.indexOf(tab))el.className='screen hidden-left';
+    else el.className='screen hidden-right';
+  });
+  Object.entries(navBtns).forEach(([t,id])=>{
+    document.getElementById(id).classList.toggle('active',t===tab);
+  });
+  currentTab=tab;
+  if(tab==='map')setTimeout(()=>map.invalidateSize(),320);
+}
+
+// ── TOAST
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._tid);t._tid=setTimeout(()=>t.style.opacity='0',2500);
+}
+
+// ── CLOCK
+function tick(){
+  const now=new Date();
+  document.getElementById('liveTime').textContent=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+setInterval(tick,1000);tick();
+
+// ── INIT
+document.getElementById('dateInput').value=fmtDate(new Date());
+document.getElementById('infoAirports').textContent=Object.keys(AIRPORTS).length+'空港';
+document.getElementById('infoRoutes').textContent=ROUTES.size+'路線';
+
+const savedAK=localStorage.getItem('amadeus_key')||'';
+const savedAS=localStorage.getItem('amadeus_secret')||'';
+if(savedAK&&savedAS){
+  amadeusKey=savedAK;amadeusSecret=savedAS;
+  document.getElementById('amadeusKeyInput').value=savedAK;
+  document.getElementById('amadeusSecretInput').value=savedAS;
+  getAmadeusToken().then(tok=>{
+    if(tok)setAmadeusStatus('live','Amadeus接続済み ✓');
+    else setAmadeusStatus('error','再認証が必要です');
+    updateApiModeLabel();
+  });
+}
+const savedAL=localStorage.getItem('airlabs_key')||'';
+if(savedAL){currentApiKey=savedAL;document.getElementById('apikeyInput').value=savedAL;testApiKey(savedAL);}
+updateApiModeLabel();
+</script>
+</body>
+</html>
