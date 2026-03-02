@@ -208,7 +208,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .avail{font-size:8px;margin-top:2px;}
 .avail.ok{color:var(--green);}
 .avail.few{color:var(--orange);}
-.avail.none{color:#555;}
+.avail.none{color:#666;}
+.flight-card.sold-out{opacity:0.5;filter:grayscale(0.4);}
 .src-badge{font-size:7px;font-weight:700;padding:1px 4px;border-radius:4px;margin-top:2px;display:inline-block;}
 .src-badge.live{background:rgba(0,232,122,.15);color:var(--green);border:1px solid rgba(0,232,122,.25);}
 .src-badge.demo{background:rgba(245,200,66,.1);color:var(--gold);border:1px solid rgba(245,200,66,.2);}
@@ -374,10 +375,46 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div class="screen hidden-right" id="screen-settings">
 
       <div class="settings-section">
+        <div class="settings-label">SerpAPI（フォールバック③）</div>
+        <div class="settings-card">
+          <div class="api-row">
+            <div class="api-desc">Amadeusと組み合わせて<b>価格補完</b>に使用。Amadeusで取得した便番号(NH85等)をGoogle Flightsで照合し正確な価格を表示します。<br><a href="https://serpapi.com/dashboard" target="_blank" style="color:var(--accent)">serpapi.com/dashboard</a> でAPIキーを確認。</div>
+            <div class="api-input-row">
+              <input class="api-input" id="serpApiKeyInput" type="text" placeholder="SerpAPI キーを貼り付け" spellcheck="false" autocomplete="off"/>
+              <button class="api-save-btn" onclick="saveSerpApiKey()">保存</button>
+            </div>
+            <div class="api-status-row">
+              <div class="status-dot demo" id="serpApiDot"></div>
+              <span id="serpApiStatus">未設定</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">AirLabs API（フォールバック②）</div>
+        <div class="settings-card">
+          <div class="api-row">
+            <div class="api-desc">月1000クエリ無料。上記が未設定の場合に使用。</div>
+            <div class="api-input-row">
+              <input class="api-input" id="apikeyInput" type="text" placeholder="AirLabs APIキー" spellcheck="false" autocomplete="off"/>
+              <button class="api-save-btn" onclick="saveApiKey()">保存</button>
+            </div>
+            <div class="api-status-row">
+              <div class="status-dot demo" id="apiDot"></div>
+              <span id="apiStatusText">未設定</span>
+              <a class="api-link" href="https://airlabs.co/signup" target="_blank">無料取得 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="settings-section">
         <div class="settings-label">⭐ Amadeus API（推奨）</div>
         <div class="settings-card">
           <div class="api-row">
-            <div class="api-desc">JALと直接連携。日付指定で全便・運賃を取得できます。<br><a href="https://developers.amadeus.com/register" target="_blank" style="color:var(--accent)">developers.amadeus.com</a> で無料登録 → アプリ作成 → API Key + Secret を入力。</div>
+            <div class="api-desc">SerpAPI・AirLabs未設定時に使用。<br><a href="https://developers.amadeus.com/register" target="_blank" style="color:var(--accent)">developers.amadeus.com</a> で無料登録。</div>
             <div style="margin-bottom:6px;">
               <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">API Key (Client ID)</div>
               <input class="api-input" id="amadeusKeyInput" type="text" placeholder="例: aBcDeFgHiJkLmNoPqRsT" spellcheck="false" autocomplete="off"/>
@@ -398,40 +435,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       </div>
 
       <div class="settings-section">
-        <div class="settings-label">AirLabs API（フォールバック）</div>
-        <div class="settings-card">
-          <div class="api-row">
-            <div class="api-desc">月1000クエリ無料。Amadeusが未設定の場合に使用。</div>
-            <div class="api-input-row">
-              <input class="api-input" id="apikeyInput" type="text" placeholder="AirLabs APIキー" spellcheck="false" autocomplete="off"/>
-              <button class="api-save-btn" onclick="saveApiKey()">保存</button>
-            </div>
-            <div class="api-status-row">
-              <div class="status-dot demo" id="apiDot"></div>
-              <span id="apiStatusText">未設定</span>
-              <a class="api-link" href="https://airlabs.co/signup" target="_blank">無料取得 →</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-section">
         <div class="settings-label">アプリ情報</div>
         <div class="settings-card">
           <div class="info-row"><span>空港数</span><span class="info-val" id="infoAirports">—</span></div>
           <div class="info-row"><span>就航路線数</span><span class="info-val" id="infoRoutes">—</span></div>
-          <div class="info-row"><span>優先API</span><span class="info-val" id="infoApiMode">デモ</span></div>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="demo-note">
-          ⚠ Amadeus サンドボックスは無料ですが月の上限あり。本番環境への切り替えは有料です。
+          <div class="info-row"><span>優先API</span><span class="info-val" id="infoApiMode">未設定</span></div>
         </div>
       </div>
 
       <div class="settings-about">
-        国内線 時刻表 · Amadeus / AirLabs API<br>
+        国内線 時刻表 · SerpAPI / Amadeus / AirLabs<br>
         地図データ © OpenStreetMap contributors
       </div>
     </div>
@@ -455,6 +468,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   </div>
 
 </div><!-- app -->
+
+<!-- CABIN MODAL -->
+<div id="cabinModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;backdrop-filter:blur(4px);" onclick="closeCabinModal()">
+  <div style="position:absolute;bottom:0;left:0;right:0;background:#0d1f38;border-radius:18px 18px 0 0;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div style="width:36px;height:4px;background:#334;border-radius:2px;margin:0 auto 16px;"></div>
+    <div id="cabinModalTitle" style="font-size:13px;font-weight:700;margin-bottom:14px;color:#fff;"></div>
+    <div id="cabinModalContent"></div>
+    <button onclick="closeCabinModal()" style="margin-top:16px;width:100%;padding:12px;background:#0a2040;border:1px solid #1e3a5f;border-radius:10px;color:#aaa;font-size:13px;">閉じる</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -543,7 +567,7 @@ const AIRPORTS = {
 const ROUTES = new Set([
   'HND-CTS','HND-HKD','HND-AKJ','HND-MMB','HND-OBO','HND-KUH','HND-WKJ','HND-SHB','HND-MBE',
   'HND-MSJ','HND-AOJ','HND-AXT','HND-SDJ','HND-HNA','HND-SYO','HND-GAJ','HND-FKS',
-  'HND-KIJ','HND-FSZ','HND-NGO','HND-NKM','HND-MMJ','HND-KMQ','HND-TOY',
+  'HND-KIJ','HND-NGO','HND-NKM','HND-MMJ','HND-KMQ','HND-TOY',
   'HND-ITM','HND-KIX','HND-UKB','HND-SHM',
   'HND-TTJ','HND-OKJ','HND-HIJ','HND-IWK','HND-YGJ','HND-IZO','HND-IWJ','HND-UBJ',
   'HND-TKS','HND-TAK','HND-MYJ','HND-KCZ',
@@ -572,6 +596,7 @@ const ROUTES = new Set([
   'TOY-HND','TOY-CTS','TOY-FUK','TOY-OKA',
   'HIJ-CTS','HIJ-SDJ','HIJ-NGO','HIJ-OKA','HIJ-FUK',
   'IWK-HND','IWK-ITM','TTJ-HND',
+  'IZO-FUK',
   'OKI-ITM','OKI-IZO','OKI-YGJ',
   'SHM-HND','SHM-ITM','IWJ-HND','IWJ-ITM','MSJ-HND','MSJ-ITM',
   'KIJ-HND','KIJ-ITM','KIJ-CTS','KIJ-FUK','KIJ-OKA','KIJ-OKD','KIJ-NKM',
@@ -583,7 +608,40 @@ const ROUTES = new Set([
   'TRA-OKA','TRA-MMY','MMD-OKA','KTD-OKA','RNJ-OKA','RNJ-KOJ',
 ]);
 
-function hasRoute(a, b){return ROUTES.has(`${a}-${b}`)||ROUTES.has(`${b}-${a}`);}
+// 学習済みルート・否定ルート（localStorageに永続保存）
+const learnedRoutes=(()=>{try{return new Set(JSON.parse(localStorage.getItem('learned_routes')||'[]'));}catch{return new Set();}})();
+const noRoutes=(()=>{try{return new Set(JSON.parse(localStorage.getItem('no_routes')||'[]'));}catch{return new Set();}})();
+
+function hasRoute(a,b){
+  const fwd=`${a}-${b}`,rev=`${b}-${a}`;
+  if(noRoutes.has(fwd)||noRoutes.has(rev))return false; // 便なし確認済み
+  return ROUTES.has(fwd)||ROUTES.has(rev)||learnedRoutes.has(fwd)||learnedRoutes.has(rev);
+}
+
+function learnRoute(from,to){
+  const key=`${from}-${to}`,rev=`${to}-${from}`;
+  // 否定リストから外す（以前は便なしだったが今は有り）
+  if(noRoutes.has(key)||noRoutes.has(rev)){
+    noRoutes.delete(key);noRoutes.delete(rev);
+    try{localStorage.setItem('no_routes',JSON.stringify([...noRoutes]));}catch{}
+  }
+  if(!learnedRoutes.has(key)&&!learnedRoutes.has(rev)&&!ROUTES.has(key)&&!ROUTES.has(rev)){
+    learnedRoutes.add(key);
+    try{localStorage.setItem('learned_routes',JSON.stringify([...learnedRoutes]));}catch{}
+  }
+}
+
+function unlearnRoute(from,to){
+  const key=`${from}-${to}`,rev=`${to}-${from}`;
+  // 学習済みから削除
+  learnedRoutes.delete(key);learnedRoutes.delete(rev);
+  try{localStorage.setItem('learned_routes',JSON.stringify([...learnedRoutes]));}catch{}
+  // 否定リストに追加（静的ROUTESの誤りも上書き）
+  if(!noRoutes.has(key)&&!noRoutes.has(rev)){
+    noRoutes.add(key);
+    try{localStorage.setItem('no_routes',JSON.stringify([...noRoutes]));}catch{}
+  }
+}
 
 const AIRLINES = [
   {code:'ANA',name:'全日空(ANA)',          short:'ANA',color:'#00a0e9',bg:'#00255a'},
@@ -625,9 +683,10 @@ function fmtTime(m){return`${String(Math.floor(m/60)%24).padStart(2,'0')}:${Stri
 function fmtDur(m){return`${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}m`;}
 function haversine(a,b){const R=6371,toR=d=>d*Math.PI/180,dLat=toR(b.lat-a.lat),dLng=toR(b.lng-a.lng),x=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
 
-// ── Demo flight generation
+// ── Demo flight generation (disabled - returns empty)
 function generateFlights(from,to,date){
-  if(from===to||!hasRoute(from,to))return[];
+  return [];
+  if(from===to)return[];
   const rng=seededRng(hashStr(from+to+date));
   const ri=()=>rng(),rn=n=>Math.floor(rng()*n);
   const dist=haversine(AIRPORTS[from],AIRPORTS[to]);
@@ -682,21 +741,16 @@ Object.entries(AIRPORTS).forEach(([code,ap])=>{
 function onAirportClick(code){
   if(!selDep){
     selDep=code;markers[code]._el.classList.add('dep');
+    drawCandidateLinesFromApi(code);
     updateHint();updateRouteSummary();
   } else if(!selArr&&code!==selDep){
-    if(!currentApiKey&&!hasRoute(selDep,code)){
-      const el=markers[code]._el;
-      el.style.borderColor='#f00';el.style.color='#f00';
-      setTimeout(()=>{el.style.borderColor='';el.style.color='';},600);
-      showToast(`${selDep}〜${code} の就航路線なし`);return;
-    }
     selArr=code;markers[code]._el.classList.add('arr');
+    clearCandidateLines();
     drawRoute();updateHint();updateRouteSummary();
     document.getElementById('searchBtn').disabled=false;
   } else if(code===selDep){
     resetSelection();
   } else {
-    if(!currentApiKey&&!hasRoute(selDep,code)){showToast(`${selDep}〜${code} の就航路線なし`);return;}
     markers[selArr]._el.classList.remove('arr');
     selArr=code;markers[code]._el.classList.add('arr');
     drawRoute();updateHint();updateRouteSummary();
@@ -721,8 +775,31 @@ function resetSelection(){
   if(selArr)markers[selArr]._el.classList.remove('arr');
   selDep=null;selArr=null;
   if(routeLine){map.removeLayer(routeLine);routeLine=null;}
+  clearCandidateLines();
   document.getElementById('searchBtn').disabled=true;
   updateHint();updateRouteSummary();
+}
+
+// ── CANDIDATE LINES
+let candidateLines=[];
+const destCache={}; // {IATA: Set} 空港ごとにキャッシュ（セッション中は再取得しない）
+
+function drawCandidateLinesFromApi(from){
+  // AirLabsのroutesデータは不完全なため、ROUTESを使用（hasRouteは双方向チェック済み）
+  clearCandidateLines();
+  const a=AIRPORTS[from];
+  for(const [code,ap] of Object.entries(AIRPORTS)){
+    if(code===from||!hasRoute(from,code))continue;
+    const line=L.polyline([[a.lat,a.lng],[ap.lat,ap.lng]],{
+      color:'rgba(255,255,255,0.7)',weight:1.5,dashArray:'3 7',interactive:false
+    }).addTo(map);
+    candidateLines.push(line);
+  }
+}
+
+function clearCandidateLines(){
+  candidateLines.forEach(l=>map.removeLayer(l));
+  candidateLines=[];
 }
 
 function updateHint(){
@@ -810,8 +887,10 @@ function renderFlightCards(flights,isReal=false){
   if(!flights.length){noRes.style.display='flex';return;}
   noRes.style.display='none';
   flights.forEach((f,i)=>{
+    const seat=!isReal?getSeat(f):null;
+    const isSoldOut=!isReal&&seat&&seat.cls==='none';
     const card=document.createElement('div');
-    card.className='flight-card';
+    card.className='flight-card'+(isSoldOut?' sold-out':'');
     card.style.animationDelay=`${i*20}ms`;
     card.dataset.fnum=f.fnum;
     let statusHtml='';
@@ -821,7 +900,6 @@ function renderFlightCards(flights,isReal=false){
       else if(f.status==='cancelled')statusHtml=`<div style="color:#f55;font-size:8px">欠航</div>`;
       else if(f.status==='delayed'||f.delayed>0)statusHtml=`<div style="color:var(--orange);font-size:8px">遅延+${f.delayed}分</div>`;
     } else {
-      const seat=getSeat(f);
       statusHtml=`<div class="avail ${seat.cls}">${seat.ic} ${seat.text}</div>`;
     }
     const prHtml=isReal&&f.price
@@ -829,6 +907,9 @@ function renderFlightCards(flights,isReal=false){
       :isReal
       ?`<div class="src-badge live">LIVE</div>`
       :`<div class="pr-num">¥${f.price.toLocaleString()}</div><div class="pr-unit">税込</div><div class="src-badge demo">DEMO</div>`;
+    const cabinBtnHtml=(isReal&&f.cabins&&Object.keys(f.cabins).length>0)
+      ?`<button onclick="showCabinModal('${f.fnum}')" style="margin-top:4px;width:100%;padding:3px 0;font-size:8px;background:#0a2040;border:1px solid #1e4070;border-radius:5px;color:#7ab;cursor:pointer;">クラス別料金</button>`
+      :'';
     card.innerHTML=`
       <div>
         <div class="al-logo" style="background:${f.airline.bg};color:${f.airline.color};border:1px solid ${f.airline.color}44">${f.airline.short}</div>
@@ -842,7 +923,7 @@ function renderFlightCards(flights,isReal=false){
         </div>
         <div class="t-block"><div class="t-time">${fmtTime(f.arr)}</div><div class="t-code">${curTo}</div></div>
       </div>
-      <div class="pr-col">${prHtml}${statusHtml}</div>
+      <div class="pr-col">${prHtml}${statusHtml}${cabinBtnHtml}</div>
     `;
     list.appendChild(card);
   });
@@ -860,7 +941,56 @@ function startSeatRefresh(){
 }
 
 // ══════════════════════════════════════════════
-//  AMADEUS API
+//  SERPAPI (Google Flights) - Priority 1
+// ══════════════════════════════════════════════
+let serpApiKey=localStorage.getItem('serp_api_key')||'';
+
+function saveSerpApiKey(){
+  serpApiKey=document.getElementById('serpApiKeyInput').value.trim();
+  localStorage.setItem('serp_api_key',serpApiKey);
+  if(serpApiKey){setSerpStatus('live','SerpAPI設定済み ✓');}
+  else setSerpStatus('demo','未設定');
+  updateApiModeLabel();
+}
+
+function setSerpStatus(state,msg){
+  document.getElementById('serpApiDot').className='status-dot '+(state==='live'?'live':state==='error'?'err':'demo');
+  document.getElementById('serpApiStatus').textContent=msg;
+}
+
+// SerpAPI: フライト番号→価格マップを返すだけ（価格補完専用）
+async function fetchSerpPriceMap(from,to,date){
+  if(!serpApiKey)return new Map();
+  try{
+    const params=new URLSearchParams({
+      engine:'google_flights',
+      departure_id:from,
+      arrival_id:to,
+      outbound_date:date,
+      type:'2',
+      stops:'1',
+      currency:'JPY',
+      hl:'ja',
+      api_key:serpApiKey
+    });
+    const res=await fetch(`https://serpapi.com/search.json?${params}`);
+    if(!res.ok)return new Map();
+    const json=await res.json();
+    const allOffers=[...(json.best_flights||[]),...(json.other_flights||[])];
+    const priceMap=new Map();
+    for(const offer of allOffers){
+      const seg=offer.flights?.[0];
+      if(!seg||!offer.price)continue;
+      // "NH 85" -> "NH85" に正規化してAmadeusのfnumと突合
+      const fnum=(seg.flight_number||'').replace(/\s+/g,'').toUpperCase();
+      if(fnum&&!priceMap.has(fnum))priceMap.set(fnum,offer.price);
+    }
+    return priceMap;
+  }catch(e){console.error('SerpAPI price error',e);return new Map();}
+}
+
+// ══════════════════════════════════════════════
+//  AMADEUS API - Priority 2
 // ══════════════════════════════════════════════
 let amadeusKey=localStorage.getItem('amadeus_key')||'';
 let amadeusSecret=localStorage.getItem('amadeus_secret')||'';
@@ -892,7 +1022,7 @@ function setAmadeusStatus(state,msg){
 
 function updateApiModeLabel(){
   const el=document.getElementById('infoApiMode');if(!el)return;
-  el.textContent=(amadeusKey&&amadeusSecret)?'Amadeus':currentApiKey?'AirLabs':'デモ';
+  el.textContent=(amadeusKey&&amadeusSecret)?'Amadeus':currentApiKey?'AirLabs':serpApiKey?'SerpAPI':'未設定';
 }
 
 async function getAmadeusToken(){
@@ -917,6 +1047,8 @@ function parseDuration(iso){
   return(parseInt(m?.[1]||0)*60)+(parseInt(m?.[2]||0));
 }
 
+const CABIN_LABELS={ECONOMY:'エコノミー',PREMIUM_ECONOMY:'プレミアムエコノミー',BUSINESS:'ビジネス',FIRST:'ファースト'};
+
 async function fetchAmadeusFlights(from,to,date){
   const token=await getAmadeusToken();
   if(!token)return null;
@@ -924,9 +1056,9 @@ async function fetchAmadeusFlights(from,to,date){
     const url=`https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${from}&destinationLocationCode=${to}&departureDate=${date}&adults=1&nonStop=true&max=250&currencyCode=JPY`;
     const res=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});
     const json=await res.json();
-    if(!json.data||!json.data.length)return null;
-    const seen=new Set();
-    const flights=[];
+    if(!json.data||!json.data.length){unlearnRoute(from,to);return null;}
+    // fnum → {dep, arr, airline, dur, cabins:{ECONOMY:{price,seats}, ...}}
+    const flightMap=new Map();
     for(const offer of json.data){
       const seg=offer.itineraries[0].segments[0];
       const depDt=new Date(seg.departure.at);
@@ -938,11 +1070,27 @@ async function fetchAmadeusFlights(from,to,date){
       const dur=parseDuration(offer.itineraries[0].duration);
       const price=Math.round(parseFloat(offer.price.grandTotal));
       const airline=getAirlineByIata(carrierCode)||getAirlineByIata(seg.carrierCode)||{code:carrierCode,name:carrierCode,short:carrierCode,color:'#aaa',bg:'#222'};
-      if(seen.has(fnum))continue;
-      seen.add(fnum);
-      flights.push({dep,arr,airline,fnum,dur,price,idx:flights.length,status:'scheduled',delayed:0,isReal:true});
+      // cabin class from travelerPricings
+      const cabin=(offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin)||'ECONOMY';
+      const seatsLeft=offer.numberOfBookableSeats||null;
+      if(!flightMap.has(fnum)){
+        flightMap.set(fnum,{dep,arr,airline,fnum,dur,status:'scheduled',delayed:0,isReal:true,cabins:{}});
+      }
+      const fl=flightMap.get(fnum);
+      // keep cheapest per cabin
+      if(!fl.cabins[cabin]||price<fl.cabins[cabin].price){
+        fl.cabins[cabin]={price,seats:seatsLeft};
+      }
+    }
+    const flights=[];
+    for(const fl of flightMap.values()){
+      // lowest price across all cabins as main price
+      const prices=Object.values(fl.cabins).map(c=>c.price);
+      fl.price=Math.min(...prices);
+      flights.push({...fl,idx:flights.length});
     }
     flights.sort((a,b)=>a.dep-b.dep);
+    if(flights.length)learnRoute(from,to); // 便があった路線を学習
     return flights.length?flights:null;
   }catch(e){return null;}
 }
@@ -998,6 +1146,28 @@ function dedup(flights){
   return flights.filter(f=>{if(seen.has(f.fnum))return false;seen.add(f.fnum);return true;});
 }
 
+function showCabinModal(fnum){
+  const f=curFlights.find(x=>x.fnum===fnum);
+  if(!f||!f.cabins)return;
+  const modal=document.getElementById('cabinModal');
+  document.getElementById('cabinModalTitle').textContent=`${fnum} クラス別料金`;
+  const order=['ECONOMY','PREMIUM_ECONOMY','BUSINESS','FIRST'];
+  let html='';
+  order.forEach(cabin=>{
+    if(!f.cabins[cabin])return;
+    const {price,seats}=f.cabins[cabin];
+    const seatsHtml=seats!=null?`<span style="font-size:10px;color:${seats<=3?'#f90':'#0e8'};">${seats<=3?`残${seats}席`:'空席あり'}</span>`:'';
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1a2e44;">
+      <div><div style="font-size:12px;font-weight:600;color:#c8e0ff;">${CABIN_LABELS[cabin]||cabin}</div>${seatsHtml}</div>
+      <div style="font-size:16px;font-weight:700;color:#00d4ff;">¥${price.toLocaleString()}</div>
+    </div>`;
+  });
+  if(!html)html='<div style="color:#667;font-size:12px;">クラス情報なし</div>';
+  document.getElementById('cabinModalContent').innerHTML=html;
+  modal.style.display='block';
+}
+function closeCabinModal(){document.getElementById('cabinModal').style.display='none';}
+
 // ── MAIN SEARCH
 async function runSearch(from,to,date){
   curFrom=from;curTo=to;curDate=date;activeFilter='all';
@@ -1010,15 +1180,37 @@ async function runSearch(from,to,date){
   let flights=null;
   let isReal=false;
 
-  // 1) Amadeus優先
+  // 1) Amadeus（便一覧）＋ SerpAPI（価格補完）を並列取得
   if(amadeusKey&&amadeusSecret){
     setAmadeusStatus('checking','取得中...');
-    flights=await fetchAmadeusFlights(from,to,date);
-    if(flights){
+    if(serpApiKey)setSerpStatus('checking','価格取得中...');
+    // 並列リクエスト
+    const [amFlights, serpPriceMap] = await Promise.all([
+      fetchAmadeusFlights(from,to,date),
+      fetchSerpPriceMap(from,to,date)
+    ]);
+    if(amFlights){
+      // SerpAPIの価格をフライト番号で突合して上書き
+      if(serpPriceMap.size>0){
+        let matched=0;
+        for(const fl of amFlights){
+          const serpPrice=serpPriceMap.get(fl.fnum);
+          if(serpPrice){
+            fl.price=serpPrice;
+            fl.priceSource='serp';
+            matched++;
+          }
+        }
+        setSerpStatus('live',`SerpAPI: ${matched}件価格補完`);
+      } else if(serpApiKey){
+        setSerpStatus('error','価格取得失敗');
+      }
+      flights=amFlights;
       isReal=true;dataSource='live';
       setAmadeusStatus('live',`Amadeus: ${flights.length}便`);
     } else {
-      setAmadeusStatus('error','取得失敗 → AirLabs/デモへ');
+      setAmadeusStatus('error','取得失敗 → フォールバックへ');
+      if(serpApiKey)setSerpStatus('demo','Amadeus未取得のためスキップ');
     }
   }
 
@@ -1037,18 +1229,36 @@ async function runSearch(from,to,date){
       flights=parsed;isReal=true;dataSource='live';
       setApiStatus('live',`AirLabs: ${parsed.length}便`);
     } else {
-      setApiStatus('error','実データなし → デモ');
+      setApiStatus('error','実データなし');
     }
   }
 
-  // 3) デモ
-  if(!flights){flights=generateFlights(from,to,date);dataSource='demo';}
+  // 3) SerpAPI単独（Amadeus/AirLabsが両方ない場合のみ）
+  if(!flights&&serpApiKey){
+    setSerpStatus('checking','取得中...');
+    // 価格マップから便一覧を生成する代わりに案内表示
+    setSerpStatus('error','Amadeus/AirLabsと併用してください');
+  }
 
   loading.style.display='none';
+
+  if(!flights){
+    curFlights=[];
+    renderFilterBar();
+    const noRes=document.getElementById('noResults');
+    if(!amadeusKey&&!currentApiKey&&!serpApiKey){
+      noRes.innerHTML='<div class="icon">⚙️</div><div>設定タブでAPIキーを設定してください</div>';
+    } else {
+      noRes.innerHTML='<div class="icon">✈</div><div>この区間・日付の便が見つかりませんでした</div>';
+    }
+    noRes.style.display='flex';
+    document.getElementById('resultsMeta').style.display='none';
+    return;
+  }
+
   curFlights=flights;
   renderFilterBar();
   renderFlights(curFlights,from,to,date,isReal);
-  if(!isReal)startSeatRefresh();
 }
 
 // ── TAB SWITCHING
@@ -1089,6 +1299,8 @@ document.getElementById('dateInput').value=fmtDate(new Date());
 document.getElementById('infoAirports').textContent=Object.keys(AIRPORTS).length+'空港';
 document.getElementById('infoRoutes').textContent=ROUTES.size+'路線';
 
+const savedSK=localStorage.getItem('serp_api_key')||'';
+if(savedSK){serpApiKey=savedSK;document.getElementById('serpApiKeyInput').value=savedSK;setSerpStatus('live','SerpAPI設定済み ✓');}
 const savedAK=localStorage.getItem('amadeus_key')||'';
 const savedAS=localStorage.getItem('amadeus_secret')||'';
 if(savedAK&&savedAS){
