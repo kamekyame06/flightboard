@@ -1056,7 +1056,7 @@ async function fetchAmadeusFlights(from,to,date){
     const url=`https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${from}&destinationLocationCode=${to}&departureDate=${date}&adults=1&nonStop=true&max=250&currencyCode=JPY`;
     const res=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});
     const json=await res.json();
-    if(!json.data||!json.data.length){unlearnRoute(from,to);return null;}
+    if(!json.data||!json.data.length)return null;
     // fnum → {dep, arr, airline, dur, cabins:{ECONOMY:{price,seats}, ...}}
     const flightMap=new Map();
     for(const offer of json.data){
